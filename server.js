@@ -11,6 +11,18 @@
 
 import express from 'express';
 import qrcode from 'qrcode';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Ensure Puppeteer reads Chrome from the same project-relative folder that
+// `postinstall` wrote to. Render wipes ~/.cache between build & runtime, but
+// keeps everything under /opt/render/project/src — so we pin the cache there.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+if (!process.env.PUPPETEER_CACHE_DIR) {
+  process.env.PUPPETEER_CACHE_DIR = path.join(__dirname, '.puppeteer-cache');
+}
+
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth, MessageMedia } = pkg;
 
@@ -41,6 +53,11 @@ function buildClient() {
     authStrategy: new LocalAuth({ dataPath: process.env.SESSION_PATH || './wweb-session' }),
     puppeteer: {
       headless: true,
+      // Honor PUPPETEER_EXECUTABLE_PATH if set (e.g. Docker with system chromium).
+      // Otherwise let puppeteer auto-resolve from PUPPETEER_CACHE_DIR.
+      ...(process.env.PUPPETEER_EXECUTABLE_PATH
+        ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
+        : {}),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -157,4 +174,7 @@ app.post('/logout', async (_req, res) => {
 app.listen(PORT, () => {
   console.log(`[wweb-bridge] listening on :${PORT}`);
   console.log(`[wweb-bridge] API_KEY set: ${API_KEY !== 'change-me'}`);
+  console.log(`[wweb-bridge] PUPPETEER_CACHE_DIR: ${process.env.PUPPETEER_CACHE_DIR || '(unset, using default ~/.cache/puppeteer)'}`);
+  console.log(`[wweb-bridge] PUPPETEER_EXECUTABLE_PATH: ${process.env.PUPPETEER_EXECUTABLE_PATH || '(unset, will auto-resolve)'}`);
+  console.log(`[wweb-bridge] SESSION_PATH: ${process.env.SESSION_PATH || './wweb-session'}`);
 });
